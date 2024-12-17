@@ -81,7 +81,6 @@ public class ExceedPlusEventHandler implements Listener {
             }
             toolTrim_Trims = toolTrimClass.getDeclaredField("Trims");
             toolTrim_Trims.setAccessible(true);
-
             trimMaterialField = toolTrimClass.getDeclaredField("TrimMaterial");
             trimMaterialField.setAccessible(true);
             trimTemplateField = toolTrimClass.getDeclaredField("TrimTemplate");
@@ -156,11 +155,12 @@ public class ExceedPlusEventHandler implements Listener {
         List<String> lore = meta.hasLore() ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
 
         // Remove existing bonus stat lines and star lines
-        removeBonusLoreLines(lore);
-        removeStarLines(lore);
-        removeSuccessChanceLineItem(meta);
-        removeSkillRequirementLineItem(meta);
-        removeToolTrimLines(lore);
+        //removeBonusLoreLines(lore);
+        //removeStarLines(lore);
+        //removeSuccessChanceLineItem(meta);
+        //removeSkillRequirementLineItem(meta);
+        //removeToolTrimLines(lore);
+        ExceedPlusUtil.clearExistingLore(lore, meta);
 
         // Generate stars lore and add at the beginning
         List<String> starsLore = ExceedPlusUtil.generateStarsLore(plugin, newLevel);
@@ -177,7 +177,7 @@ public class ExceedPlusEventHandler implements Listener {
                     .replace("{value}", ExceedPlusUtil.formatIncrementValue(newSpeedInc));
             lore.add(ColorUtil.translate(spdLine));
         }
-
+         boolean hasTrim = ExceedPlusUtil.hasToolTrim(meta, toolTrimsLoaded, toolTrimKey);
         // Add tool trim lines if applicable
         if (hasToolTrim(base)) {
             lore.add("");
@@ -467,18 +467,18 @@ public class ExceedPlusEventHandler implements Listener {
         meta.setLore(lore);
     }
 
-    private void removeSkillRequirementLineItem(ItemMeta meta) {
-        if (meta == null || !meta.hasLore()) return;
-        List<String> lore = meta.getLore();
-        if (lore == null || lore.isEmpty()) return;
+private void removeSkillRequirementLineItem(ItemMeta meta) {
+    if (meta == null || !meta.hasLore()) return;
+    List<String> lore = meta.getLore();
+    if (lore == null || lore.isEmpty()) return;
 
-        // Remove any line containing "Requires ... Level"
-        lore.removeIf(line -> {
-            String strippedLine = ColorUtil.stripColor(line).toLowerCase();
-            return strippedLine.contains("requires") && strippedLine.contains("level");
-        });
-        meta.setLore(lore);
-    }
+    // Remove any line containing "Requires ... Level"
+    lore.removeIf(line -> {
+        String strippedLine = ColorUtil.stripColor(line).toLowerCase();
+        return strippedLine.contains("requires") && strippedLine.contains("level");
+    });
+    meta.setLore(lore);
+}
 
     private void removeSkillRequirementLine(List<String> lore) {
         lore.removeIf(line -> {
@@ -487,12 +487,12 @@ public class ExceedPlusEventHandler implements Listener {
         });
     }
 
-    private void removeStarLines(List<String> lore) {
-        if (!lore.isEmpty()) {
-            String first = stripColor(lore.get(0)).toLowerCase();
-            if (first.contains("★") || first.contains("☆")) lore.remove(0);
-        }
-    }
+private void removeStarLines(List<String> lore) {
+    lore.removeIf(line -> {
+        String stripped = stripColor(line).toLowerCase();
+        return stripped.contains("★") || stripped.contains("☆");
+    });
+}
 
     private void removeSpecialTemplateLines(List<String> lore) {
         lore.removeIf(line -> stripColor(line).toLowerCase().contains("unlock potential"));
@@ -519,53 +519,56 @@ public class ExceedPlusEventHandler implements Listener {
         return meta.getPersistentDataContainer().has(toolTrimKey, PersistentDataType.STRING);
     }
 
-    private List<String> addTrimLinesFromPD(ItemStack base, List<String> lore) {
-        if (!toolTrimsLoaded) return lore;
-        ItemMeta meta = base.getItemMeta();
-        if (meta == null) return lore;
-        if (!meta.getPersistentDataContainer().has(toolTrimKey, PersistentDataType.STRING)) return lore;
+private List<String> addTrimLinesFromPD(ItemStack base, List<String> lore) {
+    if (!toolTrimsLoaded) return lore;
+    ItemMeta meta = base.getItemMeta();
+    if (meta == null) return lore;
+    if (!meta.getPersistentDataContainer().has(toolTrimKey, PersistentDataType.STRING)) return lore;
 
-        String trimKey = meta.getPersistentDataContainer().get(toolTrimKey, PersistentDataType.STRING);
-        if (trimKey == null) return lore;
+    String trimKey = meta.getPersistentDataContainer().get(toolTrimKey, PersistentDataType.STRING);
+    if (trimKey == null) return lore;
 
-        try {
-            Object trimsMap = toolTrim_Trims.get(null);
-            if (!(trimsMap instanceof Map<?, ?> map)) return lore;
-            Object currentTrim = map.get(trimKey);
-            if (currentTrim == null) return lore;
+    try {
+        Object trimsMap = toolTrim_Trims.get(null);
+        if (!(trimsMap instanceof Map<?, ?> map)) return lore;
+        Object currentTrim = map.get(trimKey);
+        if (currentTrim == null) return lore;
 
-            trimMaterialField.setAccessible(true);
-            trimTemplateField.setAccessible(true);
-            Object trimMaterialObj = trimMaterialField.get(currentTrim);
-            Object trimTemplateObj = trimTemplateField.get(currentTrim);
+        trimMaterialField.setAccessible(true);
+        trimTemplateField.setAccessible(true);
+        Object trimMaterialObj = trimMaterialField.get(currentTrim);
+        Object trimTemplateObj = trimTemplateField.get(currentTrim);
 
-            Method materialNameMethod = findNameMethod(trimMaterialObj.getClass());
-            Method templateNameMethod = findNameMethod(trimTemplateObj.getClass());
+        Method materialNameMethod = findNameMethod(trimMaterialObj.getClass());
+        Method templateNameMethod = findNameMethod(trimTemplateObj.getClass());
 
-            if (materialNameMethod == null || templateNameMethod == null) return lore;
+        if (materialNameMethod == null || templateNameMethod == null) return lore;
 
-            String patternName = ((String) templateNameMethod.invoke(trimTemplateObj)).toLowerCase();
-            String materialName = ((String) materialNameMethod.invoke(trimMaterialObj)).toLowerCase();
+        String patternName = ((String) templateNameMethod.invoke(trimTemplateObj)).toLowerCase();
+        String materialName = ((String) materialNameMethod.invoke(trimMaterialObj)).toLowerCase();
 
-            String header = plugin.getConfig().getString("tooltrims.lore.header", "&7Trim");
-            header = ChatColor.translateAlternateColorCodes('&', header);
+        String header = plugin.getConfig().getString("tooltrims.lore.header", "&7Trim");
+        header = ChatColor.translateAlternateColorCodes('&', header);
 
-            String patternLine = plugin.getConfig().getString("tooltrims.lore.patterns." + patternName, "&7Unknown Pattern");
-            patternLine = ChatColor.translateAlternateColorCodes('&', patternLine);
+        String patternLine = plugin.getConfig().getString("tooltrims.lore.patterns." + patternName, "&7Unknown Pattern");
+        patternLine = ChatColor.translateAlternateColorCodes('&', patternLine);
 
-            String matLine = plugin.getConfig().getString("tooltrims.lore.materials." + materialName, "&7Unknown Material");
-            matLine = ChatColor.translateAlternateColorCodes('&', matLine);
+        String matLine = plugin.getConfig().getString("tooltrims.lore.materials." + materialName, "&7Unknown Material");
+        matLine = ChatColor.translateAlternateColorCodes('&', matLine);
 
-            removeToolTrimLines(lore);
-            lore.add(header);
-            lore.add(patternLine);
-            lore.add(matLine);
+        // Remove existing trim lines to prevent duplication
+        ExceedPlusUtil.removeToolTrimLines(lore);
 
-        } catch (Exception e) {
-            // If reflection fails, no trim lines
-        }
-        return lore;
+        // Add new trim lines
+        lore.add(header);
+        lore.add(patternLine);
+        lore.add(matLine);
+
+    } catch (Exception e) {
+        // If reflection fails, no trim lines
     }
+    return lore;
+}
 
     private Method findNameMethod(Class<?> clazz) {
         for (Method m : clazz.getMethods()) {
@@ -602,10 +605,12 @@ public class ExceedPlusEventHandler implements Listener {
         item.setItemMeta(meta);
     }
 
-    private void removeBonusLoreLines(List<String> lore) {
-        lore.removeIf(line -> ColorUtil.stripColor(line).contains("Bonus Damage") ||
-                              ColorUtil.stripColor(line).contains("Bonus Speed"));
-    }
+private void removeBonusLoreLines(List<String> lore) {
+    lore.removeIf(line -> {
+        String stripped = ColorUtil.stripColor(line).toLowerCase();
+        return stripped.contains("bonus damage") || stripped.contains("bonus speed");
+    });
+}
 
     /**
      * Remove custom ExceedPlus modifiers to avoid duplication.
